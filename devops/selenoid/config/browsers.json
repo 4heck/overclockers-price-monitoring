@@ -1,0 +1,15 @@
+{
+    "chrome": {
+        "default": "70.0",
+        "versions": {
+            "70.0": {
+                "image": "selenoid/vnc:chrome_70.0",
+                "port": "4444",
+                "path": "/",
+                "tmpfs": {"/tmp": "size=512m"},
+                "env" : ["TZ=Europe/Moscow", "LANG=ru_RU.UTF-8", "LANGUAGE=ru:en", "LC_ALL=ru_RU.UTF-8"],
+                "shmSize" : 268435456
+            }
+        }
+    }
+}

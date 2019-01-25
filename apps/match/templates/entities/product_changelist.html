@@ -1,0 +1,13 @@
+{% extends 'admin/change_list.html' %}
+
+{% block object-tools %}
+    <div>
+
+    </div>
+    <ul class="object-tools" style="margin-right:22.5em;">
+        <li>
+            <a href="link_products/" class="addlink">Связать продукты</a>
+        </li>
+    </ul>
+    {{ block.super }}
+{% endblock %}

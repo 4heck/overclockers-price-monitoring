@@ -1,0 +1,154 @@
+version: "3.5"
+networks:
+  backend:
+    driver: ${NETWORKS_DRIVER}
+
+volumes:
+  app_log:
+    driver: ${VOLUMES_DRIVER}
+  celery_log:
+    driver: ${VOLUMES_DRIVER}
+  nginx_log:
+    driver: ${VOLUMES_DRIVER}
+  postgres:
+    driver: ${VOLUMES_DRIVER}
+  redis_queue:
+    driver: ${VOLUMES_DRIVER}
+  portainer:
+    driver: ${VOLUMES_DRIVER}
+
+services:
+### Backend Server #########################################
+  app:
+    build:
+      context: ../
+      dockerfile: devops/app/Dockerfile
+    volumes:
+      - app_log:/var/log
+      - ${APP_PATH}:/app
+    ports:
+      - "${APP_SUPERUSER_PORT}:9001"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+    networks:
+      - backend
+    depends_on:
+      - postgres
+      - selenoid
+
+### Celery #########################################
+  celery:
+    build:
+      context: ../
+      dockerfile: devops/celery/Dockerfile
+    volumes:
+      - celery_log:/var/log
+      - ${APP_PATH}:/app
+    ports:
+      - "${CELERY_SUPERUSER_PORT}:9001"
+      - "${CELERY_FLOWER_PORT}:5555"
+    depends_on:
+      - redis_queue
+      - app
+    networks:
+      - backend
+
+### NGINX Server #########################################
+  nginx:
+    build:
+      context: ./nginx
+      args:
+      - APP_UPSTREAM_CONTAINER=${APP_UPSTREAM_CONTAINER}
+      - APP_UPSTREAM_PORT=${APP_UPSTREAM_PORT}
+    volumes:
+      - nginx_log:/var/log
+      - ${NGINX_SITES_PATH}:/etc/nginx/sites-available
+      - ${APP_PATH}/static:/app/static
+      - ${APP_PATH}/media:/app/media
+    ports:
+      - "${NGINX_HOST_HTTP_PORT}:80"
+      - "${NGINX_HOST_HTTPS_PORT}:443"
+    depends_on:
+      - app
+    networks:
+      - backend
+
+### PostgreSQL ###########################################
+  postgres:
+    build: ./postgres
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    networks:
+      - backend
+
+### Redis queue ################################################
+  redis_queue:
+    build: ./redis_queue
+    volumes:
+      - redis_queue:/data
+    networks:
+      - backend
+
+### Selenoid VNC Chrome ################################################
+  selenoid-vnc-chrome:
+    image: selenoid/vnc:chrome_70.0
+
+### Selenoid ################################################
+  selenoid:
+    build: ./selenoid
+    ports:
+      - "${SELENOID_PORT}:4444"
+    volumes:
+      - ${PWD}/selenoid:/etc/selenoid:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ=Europe/Moscow
+    depends_on:
+      - selenoid-vnc-chrome
+    networks:
+      - backend
+
+### Selenoid UI ################################################
+  selenoid-ui:
+    build: ./selenoid-ui
+    ports:
+      - "${SELENOID_UI_PORT}:8080"
+    depends_on:
+      - selenoid
+    networks:
+      - backend
+
+### Portainer #########################################
+  portainer:
+    image: portainer/portainer:latest
+    ports:
+      - "${PORTAINER_PORT}:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer:/data
+    networks:
+      - backend
+
+### CAdvisor #########################################
+  cadvisor:
+    image: google/cadvisor:latest
+    ports:
+      - "${CADVISOR_PORT}:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - backend
